@@ -1,0 +1,81 @@
+---
+title: "ARIMAX-A"
+author: "Chang Gao"
+date: "5/4/2022"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(forecast)
+```
+
+```{r}
+#### read data
+arimaxa <- data.frame(read.csv('./arimaxa_ts.csv', header = T))
+arimaxa.ts <- ts(arimaxa$order.number, start = c(2020, 1), frequency = 12)
+
+#### 分训练测试集
+pred_week <- 8
+arimaxa.train <- window(arimaxa.ts, end = c(2028, 01))
+arimaxa.test <- window(arimaxa.ts, start = c(2028, 02))
+exogenous_train <- as.matrix(arimaxa[1:97, c('weight_kg', 'volume_cbm', 'lead_time')])
+exogenous_test <- as.matrix(arimaxa[98:105, c('weight_kg', 'volume_cbm', 'lead_time')])
+```
+
+```{r}
+#### 预测: moving window
+prediction <- list()
+train <- data.frame(arimaxa.train)
+exo.train <- exogenous_train
+exo.test <- t(as.matrix(exogenous_test[1,]))
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arimax.temp <- auto.arima(train, xreg = exo.train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arimax.pred.temp <- forecast(arimax.temp, h = 1, xreg = exo.test)
+  prediction$predict[p] <- arimax.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arimax.pred.temp$mean[1]))
+  exo.train <- as.matrix(rbind(exo.train, exo.test))
+  if (p < pred_week) {
+    exo.test <- t(as.matrix(exogenous_test[p+1,]))
+  }
+}
+
+prediction
+```
+
+```{r}
+####误差分析
+predicted <- list()
+predicted$rmse[1] <- sqrt(sum((prediction$predict - arimaxa.test[1:8])^2) / length(prediction$predict))
+predicted$mae[1] <- sum(abs(prediction$predict - arimaxa.test[1:8])) / length(prediction$predict)
+
+####处理结果输出
+ARIMAX_model <- data.frame(c(predicted$rmse[1]), c(predicted$mae[1]))
+colnames(ARIMA_model) <- c('rmse', 'mae')
+rownames(ARIMA_model) <- c('ARIMAX Prediction Model')
+
+ARIMAX_model
+```
+
+```{r}
+prediction <- data.frame(prediction)
+prediction <- ts(prediction, start = c(2028, 2), frequency = 12)
+
+par(family='Arial')
+plot(odnumber_test, xlab='Time', ylab='Order Number', ylim = c(0, 110), main='ARIMAX Prediction Model')
+lines(prediction, col=c('#FFB90F'))
+legend('bottomleft', legend = c('predicted', 'actual'), col = c('#FFB90F', 'black'), 
+      lwd = 1, lty = c(1, 1))
+```
+
+
+
+

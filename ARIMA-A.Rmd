@@ -1,0 +1,75 @@
+---
+title: "ARIMA-A"
+author: "Chang Gao"
+date: "5/4/2022"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(forecast)
+```
+
+```{r}
+#### read data
+arimaa <- data.frame(read.csv('./arimaa_ts.csv', header = T))
+arimaa$departure_date <- sort(as.Date(arimaa$departure_date, '%Y-%m-%d'))
+arimaa.ts <- ts(arimaa$order.number, start = c(2020, 1), frequency = 12)
+```
+
+```{r}
+#### prediction: moving window
+pred_week <- 8
+arimaa.train <- window(arimaa.ts, end = c(2028, 01))
+arimaa.test <- window(arimaa.ts, start = c(2028, 02))
+
+#### prediction: moving window
+prediction <- list()
+train <- data.frame(arimaa.train)
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arima.temp <- auto.arima(train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arima.pred.temp <- forecast(arima.temp, h = 1)
+  prediction$predict[p] <- arima.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arima.pred.temp$mean[1]))
+}
+
+prediction
+```
+
+```{r}
+####误差分析
+predicted <- list()
+predicted$rmse[1] <- sqrt(sum((prediction$predict - arimaa.test[1:8])^2) / length(prediction$predict))
+predicted$mae[1] <- sum(abs(prediction$predict - arimaa.test[1:8])) / length(prediction$predict)
+
+####处理结果输出
+ARIMA_model <- data.frame(c(predicted$rmse[1]), c(predicted$mae[1]))
+colnames(ARIMA_model) <- c('rmse', 'mae')
+rownames(ARIMA_model) <- c('ARIMA Prediction Model: Total Quantity of Order')
+
+ARIMA_model
+```
+
+```{r}
+prediction <- data.frame(prediction)
+prediction <- ts(prediction, start = c(2028, 02), frequency = 12)
+
+par(family='Arial')
+plot(arimaa.test, xlab='Time', ylab='Order Number', ylim = c(0, 120), main='ARIMA Prediction Model')
+lines(prediction, col=c('#FFB90F'))
+legend('bottomleft', legend = c('predicted', 'actual'), col = c('#FFB90F', 'black'), 
+      lwd = 1, lty = c(1, 1))
+```
+
+
+
+
+

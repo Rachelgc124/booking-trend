@@ -1,0 +1,251 @@
+---
+title: "ARIMAX-C"
+author: "Chang Gao"
+date: "5/4/2022"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(forecast)
+```
+
+```{r}
+#### read data
+home.org <- data.frame(read.csv('./home_x.csv', header = T))
+kitchen.org <- data.frame(read.csv('./kitchen_x.csv', header = T))
+hi.org <- data.frame(read.csv('./hi_x.csv', header = T))
+furniture.org <- data.frame(read.csv('./furniture_x.csv', header = T))
+others.org <- data.frame(read.csv('./others_x.csv', header = T))
+
+home <- ts(home.org$order.number, start = c(2020, 1), frequency = 12)
+kitchen <- ts(kitchen.org$order.number, start = c(2020, 1), frequency = 12)
+hi <- ts(hi.org$order.number, start = c(2020, 1), frequency = 12)
+furniture <- ts(furniture.org$order.number, start = c(2020, 1), frequency = 12)
+others <- ts(others.org$order.number, start = c(2020, 1), frequency = 12)
+
+total <- data.frame(home.org$order.number + kitchen.org$order.number + hi.org$order.number + 
+  furniture.org$order.number + others.org$order.number)
+names(total) <- c('actual')
+
+pred_week <- 8
+```
+
+```{r}
+## 1.home
+home.train <- window(home, end = c(2027, 10))
+home.test <- window(home, start = c(2027, 11))
+exogenous_train <- as.matrix(home.org[1:94, c('weight_kg', 'volume_cbm', 'lead_time')])
+exogenous_test <- as.matrix(home.org[95:102, c('weight_kg', 'volume_cbm', 'lead_time')])
+
+# prediction: moving window
+prediction.h <- list()
+train <- data.frame(home.train)
+exo.train <- exogenous_train
+exo.test <- t(as.matrix(exogenous_test[1,]))
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arimax.temp <- auto.arima(train, xreg = exo.train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arimax.pred.temp <- forecast(arimax.temp, h = 1, xreg = exo.test)
+  prediction.h$predict[p] <- arimax.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arimax.pred.temp$mean[1]))
+  exo.train <- as.matrix(rbind(exo.train, exo.test))
+  if (p < pred_week) {
+    exo.test <- t(as.matrix(exogenous_test[p+1,]))
+  }
+}
+
+prediction.h
+```
+
+```{r}
+## 2.kitchen
+kitchen.train <- window(kitchen, end = c(2027, 10))
+kitchen.test <- window(kitchen, start = c(2027, 11))
+exogenous_train <- as.matrix(kitchen.org[1:94, c('weight_kg', 'volume_cbm', 'lead_time')])
+exogenous_test <- as.matrix(kitchen.org[95:102, c('weight_kg', 'volume_cbm', 'lead_time')])
+
+# prediction: moving window
+prediction.k <- list()
+train <- data.frame(kitchen.train)
+exo.train <- exogenous_train
+exo.test <- t(as.matrix(exogenous_test[1,]))
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arimax.temp <- auto.arima(train, xreg = exo.train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arimax.pred.temp <- forecast(arimax.temp, h = 1, xreg = exo.test)
+  prediction.k$predict[p] <- arimax.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arimax.pred.temp$mean[1]))
+  exo.train <- as.matrix(rbind(exo.train, exo.test))
+  if (p < pred_week) {
+    exo.test <- t(as.matrix(exogenous_test[p+1,]))
+  }
+}
+
+prediction.k
+```
+
+```{r}
+## 3.home improvement
+hi.train <- window(hi, end = c(2027, 10))
+hi.test <- window(hi, start = c(2027, 11))
+exogenous_train <- as.matrix(hi.org[1:94, c('weight_kg', 'volume_cbm', 'lead_time')])
+exogenous_test <- as.matrix(hi.org[95:102, c('weight_kg', 'volume_cbm', 'lead_time')])
+
+# prediction: moving window
+prediction.hi <- list()
+train <- data.frame(hi.train)
+exo.train <- exogenous_train
+exo.test <- t(as.matrix(exogenous_test[1,]))
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arimax.temp <- auto.arima(train, xreg = exo.train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arimax.pred.temp <- forecast(arimax.temp, h = 1, xreg = exo.test)
+  prediction.hi$predict[p] <- arimax.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arimax.pred.temp$mean[1]))
+  exo.train <- as.matrix(rbind(exo.train, exo.test))
+  if (p < pred_week) {
+    exo.test <- t(as.matrix(exogenous_test[p+1,]))
+  }
+}
+
+prediction.hi
+```
+
+```{r}
+## 4.furniture
+furniture.train <- window(furniture, end = c(2027, 10))
+furniture.test <- window(furniture, start = c(2027, 11))
+exogenous_train <- as.matrix(furniture.org[1:94, c('weight_kg', 'volume_cbm', 'lead_time')])
+exogenous_test <- as.matrix(furniture.org[95:102, c('weight_kg', 'volume_cbm', 'lead_time')])
+
+# prediction: moving window
+prediction.f <- list()
+train <- data.frame(furniture.train)
+exo.train <- exogenous_train
+exo.test <- t(as.matrix(exogenous_test[1,]))
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arimax.temp <- auto.arima(train, xreg = exo.train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arimax.pred.temp <- forecast(arimax.temp, h = 1, xreg = exo.test)
+  prediction.f$predict[p] <- arimax.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arimax.pred.temp$mean[1]))
+  exo.train <- as.matrix(rbind(exo.train, exo.test))
+  if (p < pred_week) {
+    exo.test <- t(as.matrix(exogenous_test[p+1,]))
+  }
+}
+
+prediction.f
+```
+
+```{r}
+## 5.others
+others.train <- window(others, end = c(2027, 10))
+others.test <- window(others, start = c(2027, 11))
+exogenous_train <- as.matrix(others.org[1:94, c('weight_kg', 'volume_cbm', 'lead_time')])
+exogenous_test <- as.matrix(others.org[95:102, c('weight_kg', 'volume_cbm', 'lead_time')])
+
+# prediction: moving window
+prediction.o <- list()
+train <- data.frame(others.train)
+exo.train <- exogenous_train
+exo.test <- t(as.matrix(exogenous_test[1,]))
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arimax.temp <- auto.arima(train, xreg = exo.train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arimax.pred.temp <- forecast(arimax.temp, h = 1, xreg = exo.test)
+  prediction.o$predict[p] <- arimax.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arimax.pred.temp$mean[1]))
+  exo.train <- as.matrix(rbind(exo.train, exo.test))
+  if (p < pred_week) {
+    exo.test <- t(as.matrix(exogenous_test[p+1,]))
+  }
+}
+
+prediction.o
+```
+
+```{r}
+## 汇总
+prediction <- cbind(data.frame(prediction.h), data.frame(prediction.k), data.frame(prediction.hi), 
+                    data.frame(prediction.f), data.frame(prediction.o))
+names(prediction) <- c('home', 'kitchen', 'home_improvement', 'furniture', 'others')
+toln <- prediction$home + prediction$kitchen + prediction$home_improvement + prediction$furniture + prediction$others
+prediction <- cbind(prediction, toln)
+toln.actual <- ts(total$actual, start = c(2020, 1), frequency = 12)
+toln.test <- window(toln.actual, start = c(2027, 11))
+
+####误差分析
+predicted <- list()
+predicted$rmse[1] <- sqrt(sum((prediction$toln - toln.test[1:8])^2) / length(prediction$toln))
+predicted$mae[1] <- sum(abs(prediction$toln - toln.test[1:8])) / length(prediction$toln)
+
+####处理结果输出
+ARIMA_model <- data.frame(c(predicted$rmse[1]), c(predicted$mae[1]))
+colnames(ARIMA_model) <- c('rmse', 'mae')
+rownames(ARIMA_model) <- c('ARIMAX Prediction Model (by categories)')
+
+ARIMA_model
+```
+
+
+```{r}
+toln.predict <- data.frame(prediction$toln)
+toln.predict <- ts(toln.predict, start = c(2027, 11), frequency = 12)
+
+par(family='Arial')
+plot(toln.test, xlab='Time', ylab='Order Number', ylim = c(0, 140), main='ARIMAX Prediction Model-by categories')
+lines(toln.predict, col=c('#FFB90F'))
+legend('bottomleft', legend = c('predicted', 'actual'), col = c('#FFB90F', 'black'), 
+      lwd = 1, lty = c(1, 1))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

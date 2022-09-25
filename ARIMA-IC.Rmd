@@ -1,0 +1,231 @@
+---
+title: "ARIMA-IC"
+author: "Chang Gao"
+date: "5/3/2022"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(forecast)
+library(stats)
+library(ggplot2)
+```
+
+```{r}
+#### 数据导入
+data <- data.frame(read.csv('./arimaic_ts.csv', header = T))
+data$departure_date <- sort(as.Date(data$departure_date, '%Y-%m-%d'))
+
+par(family='Arial')
+plot(data, type='l', ylab='Order Number', xlab='Time', main='Home Improvement Order Number: 2020-2022')
+abline(h=0)
+#可能存在一定的季节效应
+```
+
+```{r}
+#为满足时间序列惯用格式条件，暂调为以月份为单位
+datats <- ts(data$order.number, start = c(2020, 1), frequency = 12)
+
+####检验是否存在季节性
+acf(as.vector(datats), lag.max=36)
+#原数据未观察到显著季节性
+```
+
+```{r}
+#一阶差分
+d.datats <- diff(datats)
+par(family='Arial')
+plot(d.datats, type='l', ylab='Order Number' ,xlab='Year', main='First Order Difference: Order Number')
+abline(h=0)
+```
+
+```{r}
+####检验一阶差分后季节性
+acf(as.vector(d.datats), lag.max=36)
+#未观察到显著季节性，注意在滞后1阶上可能存在强相关性
+```
+
+```{r}
+####检验是否为白噪声
+#zSP<-tSP-mean(tSP)
+Box.test(d.datats, type='Ljung-Box')
+#得到p<0.05，拒绝原假设，序列非白噪声
+```
+
+```{r}
+####划分训练集与测试集8/2
+d.datats.train <- window(d.datats, end = c(2027, 05))
+d.datats.test <- window(d.datats, start = c(2027, 06))
+m.datats.train <- d.datats.train - mean(d.datats.train)
+
+par(family='Arial')
+plot(m.datats.train, type='l', main='First Order Diff - Mean')
+abline(h=0)
+```
+
+```{r}
+####ARIMA模型
+##1.模型识别
+#1.1 ACF/PACF/EACF
+par(family='Arial')
+acf(as.vector(d.datats.train), ci.type = 'ma', lag.max = 36)
+pacf(as.vector(d.datats.train), lag.max = 36)
+eacf(as.vector(d.datats.train))
+#得到:ARIMA(1,0,1)/ARIMA(2,0,1)/ARIMA(3,0,1)/ARIMA(4,0,1)
+
+#1.2 BIC: 订单数量一阶差分的最优子集ARMA模型
+res = armasubsets(y = d.datats.train, nar=10, nma=10, y.name='test', ar.method='ols')
+plot(res)
+#得到:ARIMA(5,0,7)
+```
+
+```{r}
+####参数估计&模型诊断
+##需要估计参数模型:ARIMA(1,0,1)/ARIMA(2,0,1)/ARIMA(3,0,1)//ARIMA(4,0,1)/ARIMA(5,0,7)
+#1.最小二乘估计
+arima11 <- arima(d.datats.train, order=c(1,0,1), method='CSS', optim.control = list(maxit = 1000))
+arima21 <- arima(d.datats.train, order=c(2,0,1), method='CSS') 
+arima31 <- arima(d.datats.train, order=c(3,0,1), method='CSS')
+arima41 <- arima(d.datats.train, order=c(4,0,1), method='CSS')
+arima57 <- arima(d.datats.train, order=c(5,0,7), method='CSS', optim.control = list(maxit = 1000))
+
+arima11
+arima21
+arima31
+arima41
+arima57
+```
+
+```{r}
+#2.极大似然估计
+arima11.ml <- arima(d.datats.train, order=c(1,0,1), method='ML')
+arima21.ml <- arima(d.datats.train, order=c(2,0,1), method='ML')
+arima31.ml <- arima(d.datats.train, order=c(3,0,1), method='ML')
+arima41.ml <- arima(d.datats.train, order=c(4,0,1), method='ML')
+arima57.ml <- arima(d.datats.train, order=c(5,0,7), method='ML')
+
+arima11.ml
+arima21.ml
+arima31.ml
+arima41.ml
+arima57.ml
+```
+
+```{r}
+#3.模型选择
+#由于css模型不存在现成的计算AIC的函数，现自定义AIC函数
+aic_css <- function(model, p, q){
+  aic <- -2 * model$loglik + 2 * (p + q)
+  aic
+}
+
+##CSS
+print('The AIC of ARIMA model with CSS estimation method:')
+aic_css(arima11, 1, 1)
+aic_css(arima21, 2, 1)
+aic_css(arima31, 3, 1)
+aic_css(arima41, 4, 1)
+aic_css(arima57, 5, 7)
+#最好的模型为ARIMA(3,0,1)模型，其他ARIMA(5,0,7)和ARIMA(1,0,1)模型不收敛，所以不考虑
+
+##ML
+print('The AIC of ARIMA model with ML estimation method:')
+arima11.ml$aic
+arima21.ml$aic
+arima31.ml$aic
+arima41.ml$aic
+arima57.ml$aic
+#根据AIC准则，取ARIMA(3,0,1)模型
+```
+
+```{r}
+opt_arima <- arima((d.datats.train - arima31$coef['intercept']), order=c(3,0,1), method='ML')
+opt_arima
+```
+
+```{r}
+#4.残差检验
+tsdiag(opt_arima)
+checkresiduals(opt_arima)
+qqnorm(residuals(opt_arima))
+qqline(residuals(opt_arima))
+LB.test(opt_arima)
+shapiro.test(residuals(opt_arima))
+#根据Ljung-Box检验在0.05显著性水平下接受残差为独立同分布白噪声的原假设。
+#qq图基本符合正态分布
+#但发现根据Shapiro-Wilk检验，W接近1，p值大于0.05显著性水平，不拒绝原假设，残差符合标准正态分布，不存在异方差。
+```
+
+```{r}
+####用异常值拟合
+##1.检验异常值
+detectAO(opt_arima)
+detectIO(opt_arima)
+#不存在可加和新息异常值，不需要对模型进行修正
+```
+
+```{r}
+####预测
+#1.一阶差分预测模型
+opt_arima1 <- stats::arima(d.datats.train, order = c(3,0,1), method='ML')
+
+par(family='Arial')
+opt_arima.predict1 <- forecast(opt_arima1, h=8, level=c(95))
+plot(opt_arima.predict1, xlab='Time', ylab='Order Number', main='First Order Difference: ARIMA(3,1,1) Prediction Model')
+abline(h = coef(opt_arima1)[names(coef(opt_arima1)) == 'intercept'])
+lines(d.datats.test, col=c('#FFB90F'))
+```
+
+```{r}
+#2.总预测模型
+prediction <- list()
+fitted <- list()
+datats.train <- window(datats, end = c(2027, 05))
+datats.test <- window(datats, start = c(2027, 06))
+opt_arima2 <- stats::arima(datats.train, order=c(3,1,1), method='ML')
+
+par(family='Arial')
+opt_arima.predict2 <- forecast(opt_arima2, h=8, level=c(95))
+plot(opt_arima.predict2, xlab='Time', ylab='Order Number', main='ARIMA(3,1,1) Prediction Model')
+abline(h = 0)
+lines(datats.test, col=c('black'))
+```
+
+```{r}
+####误差分析
+prediction$rmse[1] <- sqrt(sum((opt_arima.predict2$mean - datats.test[1:8])^2) / length(opt_arima.predict2$mean))
+prediction$mae[1] <- sum(abs(opt_arima.predict2$mean - datats.test[1:8])) / length(opt_arima.predict2$mean)
+fitted$rmse[1] <- sqrt(sum(opt_arima2$residuals^2) / length(opt_arima2$residuals))
+fitted$mae[1] <- sum(abs(opt_arima2$residuals)) / length(opt_arima2$residuals)
+
+####处理结果输出
+ARIMA_model <- data.frame(c(prediction$rmse[1]), c(prediction$mae[1]))
+colnames(ARIMA_model) <- c('rmse', 'mae')
+rownames(ARIMA_model) <- c('ARIMA(3,1,1) Prediction Model')
+
+fitted_model <- data.frame(c(fitted$rmse[1]), c(fitted$mae[1]))
+colnames(fitted_model) <- c('rmse', 'mae')
+rownames(fitted_model) <- c('ARIMA(3,1,1) Fitted Model')
+
+ARIMA_model
+fitted_model
+```
+
+```{r}
+prediction <- data.frame(opt_arima.predict2$mean)
+#prediction <- ts(prediction, start = c(2027, 12), frequency = 12)
+
+pred.comp <- cbind(prediction, data.frame(datats.test))
+names(pred.comp) <- c('predicted', 'actual')
+
+par(family='Arial')
+plot(pred.comp$predicted, xlab='Time', ylab='Order Number', ylim = c(0, 15), 
+     col = '#FFB90F', main='ARIMA(3,1,1) Prediction Model')
+lines(pred.comp$actual, col='black')
+legend('bottomleft', legend = c('predicted', 'actual'), col = c('#FFB90F', 'black'), 
+      lwd = 1, lty = c(1, 1))
+```
+
+
+

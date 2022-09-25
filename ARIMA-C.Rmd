@@ -1,0 +1,215 @@
+---
+title: "ARIMA-C"
+author: "Chang Gao"
+date: "5/4/2022"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(forecast)
+```
+
+```{r}
+#### read data
+home.org <- data.frame(read.csv('./home_ts.csv', header = T))
+kitchen.org <- data.frame(read.csv('./kitchen_ts.csv', header = T))
+hi.org <- data.frame(read.csv('./hi_ts.csv', header = T))
+furniture.org <- data.frame(read.csv('./furniture_ts.csv', header = T))
+others.org <- data.frame(read.csv('./others_ts.csv', header = T))
+
+home <- ts(home.org$order.number, start = c(2020, 1), frequency = 12)
+kitchen <- ts(kitchen.org$order.number, start = c(2020, 1), frequency = 12)
+hi <- ts(hi.org$order.number, start = c(2020, 1), frequency = 12)
+furniture <- ts(furniture.org$order.number, start = c(2020, 1), frequency = 12)
+others <- ts(others.org$order.number, start = c(2020, 1), frequency = 12)
+
+total <- data.frame(home.org$order.number + kitchen.org$order.number + hi.org$order.number + 
+  furniture.org$order.number + others.org$order.number)
+names(total) <- c('actual')
+
+pred_week <- 8
+```
+
+```{r}
+## 1.home
+home.train <- window(home, end = c(2027, 10))
+home.test <- window(home, start = c(2027, 11))
+
+#### prediction: moving window
+prediction.h <- list()
+train <- data.frame(home.train)
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arima.temp <- auto.arima(train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arima.pred.temp <- forecast(arima.temp, h = 1)
+  prediction.h$predict[p] <- arima.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arima.pred.temp$mean[1]))
+}
+
+prediction.h
+```
+
+```{r}
+## 2.kitchen
+kitchen.train <- window(kitchen, end = c(2027, 10))
+kitchen.test <- window(kitchen, start = c(2027, 11))
+
+#### prediction: moving window
+prediction.k <- list()
+train <- data.frame(kitchen.train)
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arima.temp <- auto.arima(train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arima.pred.temp <- forecast(arima.temp, h = 1)
+  prediction.k$predict[p] <- arima.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arima.pred.temp$mean[1]))
+}
+
+prediction.k
+```
+
+```{r}
+## 3.home improvement
+home_improvement.train <- window(home_improvement, end = c(2027, 10))
+home_improvement.test <- window(home_improvement, start = c(2027, 11))
+
+#### prediction: moving window
+prediction.hi <- list()
+train <- data.frame(home_improvement.train)
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arima.temp <- auto.arima(train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arima.pred.temp <- forecast(arima.temp, h = 1)
+  prediction.hi$predict[p] <- arima.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arima.pred.temp$mean[1]))
+}
+
+prediction.hi
+```
+
+```{r}
+## 4.furniture
+furniture.train <- window(furniture, end = c(2027, 10))
+furniture.test <- window(furniture, start = c(2027, 11))
+
+#### prediction: moving window
+prediction.f <- list()
+train <- data.frame(furniture.train)
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arima.temp <- auto.arima(train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arima.pred.temp <- forecast(arima.temp, h = 1)
+  prediction.f$predict[p] <- arima.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arima.pred.temp$mean[1]))
+}
+
+prediction.f
+```
+
+```{r}
+## 5.others
+others.train <- window(others, end = c(2027, 10))
+others.test <- window(others, start = c(2027, 11))
+
+#### prediction: moving window
+prediction.o <- list()
+train <- data.frame(others.train)
+
+for (p in 1:pred_week) {
+  train <- ts(train, start = c(2020, 1), frequency = 12)
+  
+  # modeling
+  arima.temp <- auto.arima(train, seasonal.test="ch", parallel = TRUE, 
+                            num.cores = 8, stepwise = FALSE, approximation=FALSE)
+  arima.pred.temp <- forecast(arima.temp, h = 1)
+  prediction.o$predict[p] <- arima.pred.temp$mean[1]
+  
+  # update
+  train <- data.frame(train)
+  train <- rbind(train, c(arima.pred.temp$mean[1]))
+}
+
+prediction.o
+```
+
+```{r}
+## 汇总
+prediction <- cbind(data.frame(prediction.h), data.frame(prediction.k), data.frame(prediction.hi), 
+                    data.frame(prediction.f), data.frame(prediction.o))
+names(prediction) <- c('home', 'kitchen', 'home_improvement', 'furniture', 'others')
+toln <- prediction$home + prediction$kitchen + prediction$home_improvement + prediction$furniture + prediction$others
+prediction <- cbind(prediction, toln)
+toln.actual <- ts(total$actual, start = c(2020, 1), frequency = 12)
+toln.test <- window(toln.actual, start = c(2027, 11))
+
+####误差分析
+predicted <- list()
+predicted$rmse[1] <- sqrt(sum((prediction$toln - toln.test[1:8])^2) / length(prediction$toln))
+predicted$mae[1] <- sum(abs(prediction$toln - toln.test[1:8])) / length(prediction$toln)
+
+####处理结果输出
+ARIMA_model <- data.frame(c(predicted$rmse[1]), c(predicted$mae[1]))
+colnames(ARIMA_model) <- c('rmse', 'mae')
+rownames(ARIMA_model) <- c('ARIMA Prediction Model (by categories)')
+
+ARIMA_model
+```
+
+```{r}
+toln.predict <- data.frame(prediction$toln)
+toln.predict <- ts(toln.predict, start = c(2027, 11), frequency = 12)
+
+par(family='Arial')
+plot(toln.test, xlab='Time', ylab='Order Number', ylim = c(0, 140), main='ARIMA Prediction Model-by categories')
+lines(toln.predict, col=c('#FFB90F'))
+legend('bottomleft', legend = c('predicted', 'actual'), col = c('#FFB90F', 'black'), 
+      lwd = 1, lty = c(1, 1))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
